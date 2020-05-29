@@ -35,6 +35,7 @@ from __future__ import print_function
 from graph_nets import _base
 from graph_nets import graphs
 from graph_nets import utils_tf
+from graph_nets._utils import _call_with_is_training_flag_if_possible
 
 import tensorflow as tf
 
@@ -437,7 +438,7 @@ class EdgeBlock(_base.AbstractModule):
     with self._enter_variable_scope():
       self._edge_model = edge_model_fn()
 
-  def _build(self, graph):
+  def _build(self, graph, is_training=None):
     """Connects the edge block.
 
     Args:
@@ -476,7 +477,7 @@ class EdgeBlock(_base.AbstractModule):
           broadcast_globals_to_edges(graph, num_edges_hint=num_edges_hint))
 
     collected_edges = tf.concat(edges_to_collect, axis=-1)
-    updated_edges = self._edge_model(collected_edges)
+    updated_edges = _call_with_is_training_flag_if_possible(self._edge_model, collected_edges, is_training)
     return graph.replace(edges=updated_edges)
 
 
@@ -557,7 +558,7 @@ class NodeBlock(_base.AbstractModule):
         self._sent_edges_aggregator = SentEdgesToNodesAggregator(
             sent_edges_reducer)
 
-  def _build(self, graph):
+  def _build(self, graph, is_training=None):
     """Connects the node block.
 
     Args:
@@ -591,7 +592,7 @@ class NodeBlock(_base.AbstractModule):
           broadcast_globals_to_nodes(graph, num_nodes_hint=num_nodes_hint))
 
     collected_nodes = tf.concat(nodes_to_collect, axis=-1)
-    updated_nodes = self._node_model(collected_nodes)
+    updated_nodes = _call_with_is_training_flag_if_possible(self._node_model, collected_nodes, is_training)
     return graph.replace(nodes=updated_nodes)
 
 
@@ -663,7 +664,7 @@ class GlobalBlock(_base.AbstractModule):
         self._nodes_aggregator = NodesToGlobalsAggregator(
             nodes_reducer)
 
-  def _build(self, graph):
+  def _build(self, graph, is_training=None):
     """Connects the global block.
 
     Args:
@@ -690,5 +691,5 @@ class GlobalBlock(_base.AbstractModule):
       globals_to_collect.append(graph.globals)
 
     collected_globals = tf.concat(globals_to_collect, axis=-1)
-    updated_globals = self._global_model(collected_globals)
+    updated_globals = _call_with_is_training_flag_if_possible(self._global_model, collected_globals, is_training)
     return graph.replace(globals=updated_globals)

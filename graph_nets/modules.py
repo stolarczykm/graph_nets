@@ -52,6 +52,7 @@ from __future__ import print_function
 
 from graph_nets import _base
 from graph_nets import blocks
+from graph_nets._utils import _call_with_is_training_flag_if_possible
 import tensorflow as tf
 
 _DEFAULT_EDGE_BLOCK_OPT = {
@@ -118,7 +119,7 @@ class InteractionNetwork(_base.AbstractModule):
           use_globals=False,
           received_edges_reducer=reducer)
 
-  def _build(self, graph):
+  def _build(self, graph, is_training=None):
     """Connects the InterationNetwork.
 
     Args:
@@ -134,7 +135,7 @@ class InteractionNetwork(_base.AbstractModule):
       ValueError: If any of `graph.nodes`, `graph.edges`, `graph.receivers` or
         `graph.senders` is `None`.
     """
-    return self._node_block(self._edge_block(graph))
+    return self._node_block(self._edge_block(graph, is_training=is_training), is_training=is_training)
 
 
 class RelationNetwork(_base.AbstractModule):
@@ -182,7 +183,7 @@ class RelationNetwork(_base.AbstractModule):
           use_globals=False,
           edges_reducer=reducer)
 
-  def _build(self, graph):
+  def _build(self, graph, is_training=None):
     """Connects the RelationNetwork.
 
     Args:
@@ -196,7 +197,7 @@ class RelationNetwork(_base.AbstractModule):
       ValueError: If any of `graph.nodes`, `graph.receivers` or `graph.senders`
         is `None`.
     """
-    output_graph = self._global_block(self._edge_block(graph))
+    output_graph = self._global_block(self._edge_block(graph, is_training=is_training), is_training=is_training)
     return graph.replace(globals=output_graph.globals)
 
 
@@ -285,7 +286,7 @@ class GraphNetwork(_base.AbstractModule):
       self._global_block = blocks.GlobalBlock(
           global_model_fn=global_model_fn, **global_block_opt)
 
-  def _build(self, graph):
+  def _build(self, graph, is_training=None):
     """Connects the GraphNetwork.
 
     Args:
@@ -298,7 +299,10 @@ class GraphNetwork(_base.AbstractModule):
     Returns:
       An output `graphs.GraphsTuple` with updated edges, nodes and globals.
     """
-    return self._global_block(self._node_block(self._edge_block(graph)))
+    return self._global_block(
+        self._node_block(self._edge_block(graph, is_training=is_training), is_training=is_training),
+        is_training=is_training
+    )
 
 
 class GraphIndependent(_base.AbstractModule):
@@ -351,7 +355,7 @@ class GraphIndependent(_base.AbstractModule):
         self._global_model = _base.WrappedModelFnModule(
             global_model_fn, name="global_model")
 
-  def _build(self, graph):
+  def _build(self, graph, is_training=None):
     """Connects the GraphIndependent.
 
     Args:
@@ -362,10 +366,10 @@ class GraphIndependent(_base.AbstractModule):
       An output `graphs.GraphsTuple` with updated edges, nodes and globals.
 
     """
-    return graph.replace(
-        edges=self._edge_model(graph.edges),
-        nodes=self._node_model(graph.nodes),
-        globals=self._global_model(graph.globals))
+    updated_edges = _call_with_is_training_flag_if_possible(self._edge_model, graph.edges, is_training)
+    updated_nodes = _call_with_is_training_flag_if_possible(self._node_model, graph.nodes, is_training)
+    updated_globals = _call_with_is_training_flag_if_possible(self._global_model, graph.globals, is_training)
+    return graph.replace(edges=updated_edges, nodes=updated_nodes, globals=updated_globals)
 
 
 class DeepSets(_base.AbstractModule):
@@ -431,7 +435,7 @@ class DeepSets(_base.AbstractModule):
           use_globals=False,
           nodes_reducer=reducer)
 
-  def _build(self, graph):
+  def _build(self, graph, is_training=None):
     """Connects the DeepSets network.
 
     Args:
@@ -444,7 +448,7 @@ class DeepSets(_base.AbstractModule):
     Returns:
       An output `graphs.GraphsTuple` with updated globals.
     """
-    return self._global_block(self._node_block(graph))
+    return self._global_block(self._node_block(graph, is_training=is_training), is_training=is_training)
 
 
 class CommNet(_base.AbstractModule):
@@ -516,7 +520,7 @@ class CommNet(_base.AbstractModule):
           use_globals=False,
           received_edges_reducer=reducer)
 
-  def _build(self, graph):
+  def _build(self, graph, is_training=None):
     """Connects the CommNet network.
 
     Args:
@@ -530,8 +534,8 @@ class CommNet(_base.AbstractModule):
       ValueError: if any of `graph.nodes`, `graph.receivers` or `graph.senders`
       is `None`.
     """
-    node_input = self._node_encoder_block(self._edge_block(graph))
-    return graph.replace(nodes=self._node_block(node_input).nodes)
+    node_input = self._node_encoder_block(self._edge_block(graph, is_training=is_training), is_training=is_training)
+    return graph.replace(nodes=self._node_block(node_input, is_training=is_training).nodes)
 
 
 def _unsorted_segment_softmax(data,
